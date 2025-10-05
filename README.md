@@ -1,6 +1,6 @@
 # FingerScope
 
-**FingerScope** turns your fingers into magical lenses. Pinch your thumb and index finger to frame and explore parts of the world, invert colors, or isolate regions, creating an imaginary camera controlled entirely by your hands.
+**FingerScope** turns your hands into a virtual camera, letting your fingers act as magical lenses. By pinching your thumb and index finger, you can frame and explore any part of the world in a new way, zoom in on details, invert colors, or isolate regions as if seeing through an invisible lens. Switch between modes with a simple gesture and experience the world from the perspective of your fingertips.
 
 ## Features
 
