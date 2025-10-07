@@ -3,19 +3,12 @@ import mediapipe as mp
 import numpy as np
 import time
 
-# ========================
-# Global State for Mode 3
-# ========================
-screenshot_thumbnails = []  # List of [img, x, y, w, h]
-dragging_index = None       # Index of currently dragged thumbnail
+screenshot_thumbnails = []
+dragging_index = None
 countdown_active = False
 countdown_start_time = 0
-frame_points = []           # Stores thumb & index coords for framing
-bin_area = None             # (x1, y1, x2, y2) for trash bin
-
-# ========================
-# Utility Functions
-# ========================
+frame_points = []
+bin_area = None
 
 def order_points(pts):
     pts = np.array(pts)
@@ -36,9 +29,39 @@ def is_pinky_raised(hand_landmarks, h, w):
 def point_in_rect(px, py, x1, y1, x2, y2):
     return x1 <= px <= x2 and y1 <= py <= y2
 
-# ========================
-# Mode Functions
-# ========================
+def draw_trash_icon(img, center_x, center_y, size):
+    color = (255, 255, 255)
+    thickness = max(2, size // 12)
+
+    body_width = int(size * 0.6)
+    body_height = int(size * 0.65)
+    lid_width = int(size * 0.7)
+    lid_height = int(size * 0.12)
+    handle_width = int(size * 0.18)
+    handle_height = int(size * 0.10)
+
+    body_x1 = center_x - body_width // 2
+    body_y1 = center_y - body_height // 2 + int(size * 0.05)
+    body_x2 = center_x + body_width // 2
+    body_y2 = center_y + body_height // 2
+    cv2.rectangle(img, (body_x1, body_y1), (body_x2, body_y2), color, thickness)
+
+    lid_y_bottom = body_y1 - thickness
+    lid_y_top = lid_y_bottom - lid_height
+    lid_x1 = center_x - lid_width // 2
+    lid_x2 = center_x + lid_width // 2
+    cv2.rectangle(img, (lid_x1, lid_y_top), (lid_x2, lid_y_bottom), color, thickness)
+
+    handle_y_bottom = lid_y_top - thickness // 2
+    handle_y_top = handle_y_bottom - handle_height
+    handle_x1 = center_x - handle_width // 2
+    handle_x2 = center_x + handle_width // 2
+    cv2.rectangle(img, (handle_x1, handle_y_top), (handle_x2, handle_y_bottom), color, max(1, thickness // 2))
+
+    slat_thickness = max(1, thickness // 2)
+    for offset in (-body_width // 4, 0, body_width // 4):
+        x = center_x + offset
+        cv2.line(img, (x, body_y1 + thickness), (x, body_y2 - thickness), color, slat_thickness)
 
 def run_inverted_colours_mode(frame, hands, mp_hands, mp_drawing):
     h, w, c = frame.shape
@@ -126,15 +149,15 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
     h, w, c = frame.shape
     output = frame.copy()
 
-    # Define trash bin area (top-right corner)
     bin_size = 80
     bin_x1, bin_y1 = w - bin_size, 10
     bin_x2, bin_y2 = w - 10, 10 + bin_size
     bin_area = (bin_x1, bin_y1, bin_x2, bin_y2)
     cv2.rectangle(output, (bin_x1, bin_y1), (bin_x2, bin_y2), (0, 0, 255), -1)
-    cv2.putText(output, "🗑️", (w - 60, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+    icon_center_x = (bin_x1 + bin_x2) // 2
+    icon_center_y = (bin_y1 + bin_y2) // 2 + 5
+    draw_trash_icon(output, icon_center_x, icon_center_y, size=60)
 
-    # Reset for this frame
     frame_points = []
     current_pinches = []
     pinky_raised = False
@@ -156,24 +179,23 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
 
             frame_points.extend([thumb_coords, index_coords])
 
-            # Pinch detection for dragging
             pinch_dist = np.hypot(index_coords[0] - thumb_coords[0], index_coords[1] - thumb_coords[1])
             if pinch_dist < 40:
                 pinch_center = ((thumb_coords[0] + index_coords[0]) // 2,
                                 (thumb_coords[1] + index_coords[1]) // 2)
                 current_pinches.append(pinch_center)
 
-            # Pinky raised check (only if not counting down)
+
             if not countdown_active:
                 if pinky_tip.y * h < pinky_base.y * h - 20:
                     pinky_raised = True
 
-    # Start countdown only once when pinky is raised
+
     if pinky_raised and not countdown_active:
         countdown_active = True
         countdown_start_time = time.time()
 
-    # Handle countdown & capture
+
     if countdown_active:
         elapsed = time.time() - countdown_start_time
         if elapsed < 2.0:
@@ -205,7 +227,7 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
                             captured = cv2.resize(captured, (new_w, new_h))
                             thumb_w, thumb_h = new_w, new_h
 
-                        # Place at CENTER of captured region
+                        
                         center_x = (x_min + x_max) // 2
                         center_y = (y_min + y_max) // 2
                         start_x = center_x - thumb_w // 2
@@ -217,14 +239,13 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
                         screenshot_thumbnails.append([captured, start_x, start_y, thumb_w, thumb_h])
             countdown_active = False
 
-    # Draw framing rectangle
     if len(frame_points) == 2:
         cv2.rectangle(output, frame_points[0], frame_points[1], (0, 255, 0), 2)
     elif len(frame_points) == 4:
         pts = order_points(frame_points).reshape((-1, 1, 2))
         cv2.polylines(output, [pts], True, (0, 255, 0), 2)
 
-    # DRAGGING: only on pinch
+
     if dragging_index is None and current_pinches and not countdown_active:
         for i, (img_thumb, x, y, tw, th) in enumerate(screenshot_thumbnails):
             for (px, py) in current_pinches:
@@ -234,7 +255,7 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
             if dragging_index is not None:
                 break
 
-    # Update dragged thumbnail
+
     if dragging_index is not None and current_pinches:
         img_thumb, _, _, tw, th = screenshot_thumbnails[dragging_index]
         px, py = current_pinches[0]
@@ -245,7 +266,7 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
         screenshot_thumbnails[dragging_index][1] = new_x
         screenshot_thumbnails[dragging_index][2] = new_y
 
-        # Bin collision: AABB overlap
+
         t_x1, t_y1 = new_x, new_y
         t_x2, t_y2 = new_x + tw, new_y + th
         b_x1, b_y1, b_x2, b_y2 = bin_area
@@ -253,12 +274,12 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
         if not (t_x2 < b_x1 or t_x1 > b_x2 or t_y2 < b_y1 or t_y1 > b_y2):
             screenshot_thumbnails.pop(dragging_index)
             dragging_index = None
-            return output  # skip drawing deleted item
+            return output
 
     elif dragging_index is not None and not current_pinches:
         dragging_index = None
 
-    # Draw all thumbnails
+
     for img_thumb, x, y, tw, th in screenshot_thumbnails:
         if tw > 0 and th > 0 and 0 <= x < w and 0 <= y < h:
             end_x = min(x + tw, w)
@@ -270,9 +291,6 @@ def run_screenshot_canvas_mode(frame, hands, mp_hands, mp_draw):
 
     return output
 
-# ========================
-# UI & Mode Switching
-# ========================
 
 def draw_mode_buttons(img, selected_mode):
     h, w, _ = img.shape
@@ -315,9 +333,6 @@ def detect_pinch_and_button(results, w, h, buttons):
                     return i
     return None
 
-# ========================
-# Main Loop
-# ========================
 
 def main():
     global screenshot_thumbnails, dragging_index, countdown_active
@@ -348,7 +363,7 @@ def main():
         if pinch_option is not None and pinch_option != selected_mode and (now - last_switch_time) > switch_cooldown:
             selected_mode = pinch_option
             last_switch_time = now
-            # Reset Mode 3 state when switching away
+
             if selected_mode != 3:
                 screenshot_thumbnails = []
                 dragging_index = None
@@ -365,7 +380,7 @@ def main():
 
         draw_mode_buttons(output, selected_mode)
         cv2.imshow("Finger Window", output)
-        if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
+        if cv2.waitKey(1) & 0xFF == 27:
             break
 
     cap.release()
