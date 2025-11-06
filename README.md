@@ -5,7 +5,7 @@
 ## Features
 
 - Real-time hand tracking using **MediaPipe**.
-- Two interactive modes:
+- Two interactive modes:-
   1. **Main Mode:** Show only the region framed by your fingers on a black background.
   2. **Inverted Colors Mode:** Invert colors inside the framed region.
 - Switch between modes using a simple pinch gesture over on-screen buttons.
